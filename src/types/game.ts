@@ -2,6 +2,10 @@ export type TimeOfDay = 'morning' | 'afternoon' | 'evening' | 'night'
 
 export type MoodLevel = 'happy' | 'good' | 'neutral' | 'bad' | 'angry'
 
+export type WarningLevel = 'info' | 'warning' | 'danger' | 'critical'
+
+export type WarningType = 'mood' | 'affinity' | 'both'
+
 export type ActionType = 'chat' | 'gift' | 'work'
 
 export type Rarity = 'common' | 'rare' | 'epic' | 'legendary'
@@ -81,6 +85,30 @@ export interface ActionConfig {
   cost?: number
   reward?: number
   energyCost: number
+}
+
+export interface RemedyAction {
+  type: 'chat' | 'gift' | 'event' | 'work'
+  label: string
+  icon: string
+  description: string
+  targetCharacterId?: string
+  giftId?: string
+  estimatedEffect: string
+  priority: number
+}
+
+export interface CharacterWarning {
+  characterId: string
+  characterName: string
+  characterAvatar: string
+  warningType: WarningType
+  warningLevel: WarningLevel
+  moodValue?: number
+  affinityValue?: number
+  title: string
+  description: string
+  remedyActions: RemedyAction[]
 }
 
 export interface GameConfig {

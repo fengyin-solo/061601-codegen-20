@@ -1,6 +1,6 @@
 import { defineStore } from 'pinia'
 import { ref, computed } from 'vue'
-import type { TimeOfDay, ActionType, GameEventConfig, EventChoice } from '../types/game'
+import type { TimeOfDay, ActionType, GameEventConfig, EventChoice, CharacterWarning } from '../types/game'
 import gameConfig from '../config/gameConfig'
 import {
   clamp,
@@ -11,7 +11,10 @@ import {
   isGiftDisliked,
   getTimeLabel,
   getNextTimeSlot,
-  getMoodLabel
+  getMoodLabel,
+  buildCharacterWarning,
+  setGameConfigStatic,
+  compareWarningLevel
 } from '../utils/gameUtils'
 
 export interface CharacterState {
@@ -71,6 +74,30 @@ export const useGameStore = defineStore('game', () => {
 
   const unlockedCharacters = computed(() =>
     characters.value.filter(c => c.unlocked)
+  )
+
+  const characterWarnings = computed<CharacterWarning[]>(() => {
+    const warnings: CharacterWarning[] = []
+    characters.value.forEach(charState => {
+      if (!charState.unlocked) return
+      const charConfig = gameConfig.characters.find(c => c.id === charState.id)
+      const warning = buildCharacterWarning(
+        charState,
+        charConfig,
+        gameConfig,
+        resources.value
+      )
+      if (warning) {
+        warnings.push(warning)
+      }
+    })
+    return warnings.sort((a, b) => compareWarningLevel(a.warningLevel, b.warningLevel))
+  })
+
+  const hasWarnings = computed(() => characterWarnings.value.length > 0)
+
+  const criticalWarningCount = computed(() =>
+    characterWarnings.value.filter(w => w.warningLevel === 'critical').length
   )
 
   const currentCharacter = computed(() =>
@@ -446,6 +473,7 @@ export const useGameStore = defineStore('game', () => {
   }
 
   function initGame() {
+    setGameConfigStatic(gameConfig)
     if (logs.value.length === 0) {
       addLog('system', '🎮 游戏开始！欢迎来到恋爱物语')
     }
@@ -462,6 +490,9 @@ export const useGameStore = defineStore('game', () => {
     currentCharacter,
     currentCharacterConfig,
     unlockedCharacters,
+    characterWarnings,
+    hasWarnings,
+    criticalWarningCount,
     flags,
     triggeredEvents,
     collectedCards,

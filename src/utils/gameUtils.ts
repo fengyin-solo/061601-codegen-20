@@ -1,4 +1,4 @@
-import type { TimeOfDay, MoodLevel, GameConfig, CharacterConfig } from '../types/game'
+import type { TimeOfDay, MoodLevel, GameConfig, CharacterConfig, WarningLevel, CharacterWarning, RemedyAction } from '../types/game'
 
 export function getMoodLevel(mood: number): MoodLevel {
   if (mood >= 80) return 'happy'
@@ -155,4 +155,185 @@ export function calculateGiftAffinity(
   baseChange *= moodMultiplier
 
   return Math.round(baseChange * 10) / 10
+}
+
+export function getMoodWarningLevel(mood: number, maxMood: number): WarningLevel | null {
+  const ratio = mood / maxMood
+  if (ratio <= 0.15) return 'critical'
+  if (ratio <= 0.3) return 'danger'
+  if (ratio <= 0.45) return 'warning'
+  return null
+}
+
+export function getAffinityWarningLevel(affinity: number, maxAffinity: number, minAffinity: number): WarningLevel | null {
+  const range = maxAffinity - minAffinity
+  const ratio = (affinity - minAffinity) / range
+  if (ratio <= 0.2) return 'critical'
+  if (ratio <= 0.3) return 'danger'
+  if (ratio <= 0.4) return 'warning'
+  return null
+}
+
+export function getWarningColor(level: WarningLevel): string {
+  const colors: Record<WarningLevel, string> = {
+    info: '#3b82f6',
+    warning: '#eab308',
+    danger: '#f97316',
+    critical: '#ef4444'
+  }
+  return colors[level]
+}
+
+export function getWarningLabel(level: WarningLevel): string {
+  const labels: Record<WarningLevel, string> = {
+    info: '提示',
+    warning: '注意',
+    danger: '警告',
+    critical: '危险'
+  }
+  return labels[level]
+}
+
+export function compareWarningLevel(a: WarningLevel, b: WarningLevel): number {
+  const priority: Record<WarningLevel, number> = {
+    info: 0,
+    warning: 1,
+    danger: 2,
+    critical: 3
+  }
+  return priority[b] - priority[a]
+}
+
+export function generateRemedyActions(
+  character: CharacterConfig,
+  moodWarning: WarningLevel | null,
+  affinityWarning: WarningLevel | null,
+  currentResources: number
+): RemedyAction[] {
+  const actions: RemedyAction[] = []
+
+  if (moodWarning || affinityWarning) {
+    if (character.favoriteGifts.length > 0) {
+      const favoriteGiftId = character.favoriteGifts[0]
+      const giftConfig = gameConfigStatic?.gifts.find(g => g.id === favoriteGiftId)
+      if (giftConfig) {
+        const canAfford = currentResources >= giftConfig.price
+        actions.push({
+          type: 'gift',
+          label: `送${giftConfig.name}`,
+          icon: giftConfig.icon,
+          description: `ta最喜欢的礼物，能大幅提升好感和心情`,
+          targetCharacterId: character.id,
+          giftId: favoriteGiftId,
+          estimatedEffect: `好感 +8~12，心情 +15`,
+          priority: canAfford ? 10 : 5
+        })
+      }
+    }
+
+    const bestTopic = character.chatTopics.reduce((best, topic) =>
+      topic.affinity > best.affinity ? topic : best
+    , character.chatTopics[0])
+    if (bestTopic) {
+      actions.push({
+        type: 'chat',
+        label: `聊${bestTopic.topic}`,
+        icon: '💬',
+        description: `聊ta感兴趣的话题`,
+        targetCharacterId: character.id,
+        estimatedEffect: `好感 +3~5，心情 +5`,
+        priority: 8
+      })
+    }
+
+    if (moodWarning && (moodWarning === 'danger' || moodWarning === 'critical')) {
+      actions.push({
+        type: 'work',
+        label: '避免打工',
+        icon: '⚠️',
+        description: '打工会降低所有角色心情',
+        estimatedEffect: '防止心情进一步下降',
+        priority: 7
+      })
+    }
+
+    if (affinityWarning && (affinityWarning === 'danger' || affinityWarning === 'critical')) {
+      actions.push({
+        type: 'event',
+        label: '多花时间陪伴',
+        icon: '⏰',
+        description: '每天优先和ta互动，避免好感持续下降',
+        estimatedEffect: '阻止关系恶化',
+        priority: 9
+      })
+    }
+  }
+
+  return actions.sort((a, b) => b.priority - a.priority)
+}
+
+export function buildCharacterWarning(
+  charState: { id: string; affinity: number; mood: number; unlocked: boolean },
+  charConfig: CharacterConfig | undefined,
+  gameConfig: GameConfig,
+  currentResources: number
+): CharacterWarning | null {
+  if (!charState.unlocked || !charConfig) return null
+
+  const moodWarning = getMoodWarningLevel(charState.mood, gameConfig.maxMood)
+  const affinityWarning = getAffinityWarningLevel(
+    charState.affinity,
+    gameConfig.maxAffinity,
+    gameConfig.minAffinity
+  )
+
+  if (!moodWarning && !affinityWarning) return null
+
+  const worseLevel = moodWarning && affinityWarning
+    ? (compareWarningLevel(moodWarning, affinityWarning) < 0 ? moodWarning : affinityWarning)
+    : (moodWarning || affinityWarning!)
+
+  const warningType = moodWarning && affinityWarning
+    ? 'both'
+    : moodWarning ? 'mood' : 'affinity'
+
+  let title = ''
+  let description = ''
+
+  if (warningType === 'both') {
+    title = `${charConfig.name}的状态很糟糕`
+    description = `心情和好感都处于${getWarningLabel(worseLevel)}状态，需要尽快补救！`
+  } else if (warningType === 'mood') {
+    title = `${charConfig.name}的心情很低落`
+    description = `当前心情${charState.mood}，处于${getWarningLabel(moodWarning!)}状态，快去陪陪ta吧。`
+  } else {
+    title = `和${charConfig.name}的关系堪忧`
+    description = `当前好感${charState.affinity}，处于${getWarningLabel(affinityWarning!)}状态，关系正在疏远。`
+  }
+
+  const remedyActions = generateRemedyActions(
+    charConfig,
+    moodWarning,
+    affinityWarning,
+    currentResources
+  )
+
+  return {
+    characterId: charState.id,
+    characterName: charConfig.name,
+    characterAvatar: charConfig.avatar,
+    warningType,
+    warningLevel: worseLevel,
+    moodValue: charState.mood,
+    affinityValue: charState.affinity,
+    title,
+    description,
+    remedyActions
+  }
+}
+
+let gameConfigStatic: GameConfig | null = null
+
+export function setGameConfigStatic(config: GameConfig) {
+  gameConfigStatic = config
 }
