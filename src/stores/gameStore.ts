@@ -13,7 +13,6 @@ import {
   getNextTimeSlot,
   getMoodLabel,
   buildCharacterWarning,
-  setGameConfigStatic,
   compareWarningLevel
 } from '../utils/gameUtils'
 
@@ -473,7 +472,6 @@ export const useGameStore = defineStore('game', () => {
   }
 
   function initGame() {
-    setGameConfigStatic(gameConfig)
     if (logs.value.length === 0) {
       addLog('system', '🎮 游戏开始！欢迎来到恋爱物语')
     }

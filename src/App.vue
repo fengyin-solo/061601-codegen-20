@@ -59,7 +59,7 @@ onMounted(() => {
     
     <div class="main-content">
       <div class="left-column">
-        <WarningPanel @open-gift="showGiftModal = true" />
+        <WarningPanel />
         <CharacterPanel />
         <ActionPanel @open-gift="showGiftModal = true" />
       </div>

@@ -208,16 +208,25 @@ export function generateRemedyActions(
   character: CharacterConfig,
   moodWarning: WarningLevel | null,
   affinityWarning: WarningLevel | null,
-  currentResources: number
+  currentResources: number,
+  gameConfig: GameConfig,
+  currentMood: number
 ): RemedyAction[] {
   const actions: RemedyAction[] = []
 
   if (moodWarning || affinityWarning) {
     if (character.favoriteGifts.length > 0) {
       const favoriteGiftId = character.favoriteGifts[0]
-      const giftConfig = gameConfigStatic?.gifts.find(g => g.id === favoriteGiftId)
+      const giftConfig = gameConfig.gifts.find(g => g.id === favoriteGiftId)
       if (giftConfig) {
         const canAfford = currentResources >= giftConfig.price
+        const estimatedAffinity = Math.round(calculateGiftAffinity(
+          favoriteGiftId,
+          character,
+          giftConfig.price,
+          currentMood
+        ) * 10) / 10
+        const moodChange = 15
         actions.push({
           type: 'gift',
           label: `送${giftConfig.name}`,
@@ -225,7 +234,7 @@ export function generateRemedyActions(
           description: `ta最喜欢的礼物，能大幅提升好感和心情`,
           targetCharacterId: character.id,
           giftId: favoriteGiftId,
-          estimatedEffect: `好感 +8~12，心情 +15`,
+          estimatedEffect: `好感 +${estimatedAffinity}，心情 +${moodChange}`,
           priority: canAfford ? 10 : 5
         })
       }
@@ -235,13 +244,20 @@ export function generateRemedyActions(
       topic.affinity > best.affinity ? topic : best
     , character.chatTopics[0])
     if (bestTopic) {
+      const estimatedAffinity = Math.round(calculateChatAffinity(
+        bestTopic.topic,
+        character,
+        currentMood,
+        'afternoon'
+      ) * 10) / 10
+      const moodChange = estimatedAffinity > 0 ? 5 : -3
       actions.push({
         type: 'chat',
         label: `聊${bestTopic.topic}`,
         icon: '💬',
         description: `聊ta感兴趣的话题`,
         targetCharacterId: character.id,
-        estimatedEffect: `好感 +3~5，心情 +5`,
+        estimatedEffect: `好感 ${estimatedAffinity >= 0 ? '+' : ''}${estimatedAffinity}，心情 ${moodChange >= 0 ? '+' : ''}${moodChange}`,
         priority: 8
       })
     }
@@ -315,7 +331,9 @@ export function buildCharacterWarning(
     charConfig,
     moodWarning,
     affinityWarning,
-    currentResources
+    currentResources,
+    gameConfig,
+    charState.mood
   )
 
   return {
@@ -330,10 +348,4 @@ export function buildCharacterWarning(
     description,
     remedyActions
   }
-}
-
-let gameConfigStatic: GameConfig | null = null
-
-export function setGameConfigStatic(config: GameConfig) {
-  gameConfigStatic = config
 }

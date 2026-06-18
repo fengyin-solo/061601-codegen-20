@@ -8,6 +8,8 @@ const gameStore = useGameStore()
 
 const warnings = computed(() => gameStore.characterWarnings)
 
+const canPerformAction = computed(() => gameStore.actionsRemaining > 0)
+
 function getLevelClass(level: string): string {
   const classes: Record<string, string> = {
     info: 'level-info',
@@ -27,18 +29,34 @@ function getTypeIcon(type: string): string {
   return icons[type] || '⚠️'
 }
 
+function canExecuteAction(action: RemedyAction): boolean {
+  if (!canPerformAction.value) return false
+  if (action.type === 'chat') return true
+  if (action.type === 'gift') {
+    if (!action.giftId) return false
+    return true
+  }
+  return false
+}
+
 function handleRemedyAction(action: RemedyAction) {
-  if (action.type === 'gift' && action.targetCharacterId && action.giftId) {
+  if (!canExecuteAction(action)) return
+
+  if (action.type === 'chat' && action.targetCharacterId) {
     gameStore.selectCharacter(action.targetCharacterId)
-    emit('open-gift')
-  } else if (action.type === 'chat' && action.targetCharacterId) {
+    gameStore.performAction('chat', action.targetCharacterId)
+  } else if (action.type === 'gift' && action.targetCharacterId && action.giftId) {
     gameStore.selectCharacter(action.targetCharacterId)
+    gameStore.performAction('gift', action.targetCharacterId, action.giftId)
   }
 }
 
-const emit = defineEmits<{
-  (e: 'open-gift'): void
-}>()
+function getActionButtonText(action: RemedyAction): string {
+  if (!canPerformAction.value) return '行动力不足'
+  if (action.type === 'chat') return '立即聊天'
+  if (action.type === 'gift') return '立即送礼'
+  return '查看'
+}
 </script>
 
 <template>
@@ -89,6 +107,10 @@ const emit = defineEmits<{
               v-for="(action, index) in warning.remedyActions"
               :key="index"
               class="remedy-item"
+              :class="{ 
+                clickable: canExecuteAction(action),
+                disabled: !canExecuteAction(action) && (action.type === 'chat' || action.type === 'gift')
+              }"
               @click="handleRemedyAction(action)"
             >
               <span class="remedy-icon">{{ action.icon }}</span>
@@ -96,7 +118,16 @@ const emit = defineEmits<{
                 <div class="remedy-label">{{ action.label }}</div>
                 <div class="remedy-desc">{{ action.description }}</div>
               </div>
-              <div class="remedy-effect">{{ action.estimatedEffect }}</div>
+              <div class="remedy-right">
+                <div class="remedy-effect">{{ action.estimatedEffect }}</div>
+                <div 
+                  v-if="action.type === 'chat' || action.type === 'gift'" 
+                  class="remedy-action-btn"
+                  :class="{ active: canExecuteAction(action) }"
+                >
+                  {{ getActionButtonText(action) }}
+                </div>
+              </div>
             </div>
           </div>
         </div>
@@ -278,13 +309,21 @@ const emit = defineEmits<{
   padding: 10px;
   background: var(--bg-tertiary);
   border-radius: var(--radius-sm);
-  cursor: pointer;
   transition: all 0.2s;
 }
 
-.remedy-item:hover {
+.remedy-item.clickable {
+  cursor: pointer;
+}
+
+.remedy-item.clickable:hover {
   background: var(--accent-light);
   transform: translateX(4px);
+}
+
+.remedy-item.disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
 }
 
 .remedy-icon {
@@ -308,11 +347,32 @@ const emit = defineEmits<{
   color: var(--text-muted);
 }
 
+.remedy-right {
+  flex-shrink: 0;
+  text-align: right;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 4px;
+}
+
 .remedy-effect {
   font-size: 11px;
   color: var(--success-color);
   font-weight: 500;
-  flex-shrink: 0;
-  text-align: right;
+}
+
+.remedy-action-btn {
+  font-size: 10px;
+  padding: 3px 8px;
+  border-radius: 9999px;
+  background: var(--bg-tertiary);
+  color: var(--text-muted);
+  font-weight: 500;
+}
+
+.remedy-action-btn.active {
+  background: var(--accent-primary);
+  color: white;
 }
 </style>
